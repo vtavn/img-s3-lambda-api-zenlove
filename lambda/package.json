@@ -1,0 +1,16 @@
+{
+  "name": "img-transformer",
+  "version": "1.0.0",
+  "description": "Image transformation Lambda function",
+  "type": "module",
+  "main": "index.mjs",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.670.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
