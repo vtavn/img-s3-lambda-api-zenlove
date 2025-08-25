@@ -67,8 +67,10 @@ const getContentType = (format) => {
     png: "image/png",
     webp: "image/webp",
     avif: "image/avif",
+    gif: "image/gif",
+    mp3: "audio/mpeg",
   };
-  return typeMap[format] || "image/webp";
+  return typeMap[format] || (format === "mp3" ? "audio/mpeg" : "image/webp");
 };
 
 export const handler = async (event) => {
@@ -137,6 +139,24 @@ export const handler = async (event) => {
 
     console.log(`Original image size: ${imageBuffer.length} bytes`);
 
+    // Determine original format from file extension
+    const originalFormat = getImageFormat(proxy);
+
+    // Passthrough for MP3 regardless of query params
+    if (originalFormat === "mp3") {
+      const contentType = getContentType("mp3");
+      return {
+        statusCode: 200,
+        headers: {
+          "Content-Type": contentType,
+          "Cache-Control": "public, max-age=31536000, immutable",
+          "Content-Length": imageBuffer.length.toString(),
+        },
+        body: imageBuffer.toString("base64"),
+        isBase64Encoded: true,
+      };
+    }
+
     // If no transformation parameters, return original image
     if (
       !resizeParam &&
@@ -145,7 +165,6 @@ export const handler = async (event) => {
       !event.queryStringParameters?.quality
     ) {
       console.log("No transformation parameters, returning original image");
-      const originalFormat = getImageFormat(proxy);
       const contentType = getContentType(originalFormat);
 
       return {
@@ -158,6 +177,36 @@ export const handler = async (event) => {
         body: imageBuffer.toString("base64"),
         isBase64Encoded: true,
       };
+    }
+
+    // Guard and process GIF inputs
+    if (
+      originalFormat === "gif" &&
+      (resizeParam ||
+        cropParam ||
+        formatParam ||
+        event.queryStringParameters?.quality)
+    ) {
+      if (formatParam && formatParam.toLowerCase() === "gif") {
+        return {
+          statusCode: 400,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ error: "Output GIF không được hỗ trợ" }),
+        };
+      }
+
+      // Detect animated GIF and reject if animated when transformation requested
+      const gifMeta = await sharp(imageBuffer, { animated: true }).metadata();
+      if (gifMeta?.pages && gifMeta.pages > 1) {
+        return {
+          statusCode: 400,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            error:
+              "Animated GIF không được hỗ trợ xử lý; chỉ trả về nguyên bản",
+          }),
+        };
+      }
     }
 
     // Process image with Sharp
@@ -203,6 +252,13 @@ export const handler = async (event) => {
       case "avif":
         processedBuffer = await sharpInstance.avif(encodeOptions).toBuffer();
         break;
+      case "gif":
+        // Disallow encoding to GIF
+        return {
+          statusCode: 400,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ error: "Output GIF không được hỗ trợ" }),
+        };
       default:
         processedBuffer = await sharpInstance.webp(encodeOptions).toBuffer();
     }
@@ -227,7 +283,14 @@ export const handler = async (event) => {
     console.error("Error processing image:", error);
 
     // Handle specific S3 errors
-    if (error.name === "NoSuchKey") {
+    if (
+      error?.name === "NoSuchKey" ||
+      error?.Code === "NoSuchKey" ||
+      error?.code === "NoSuchKey" ||
+      error?.$metadata?.httpStatusCode === 404 ||
+      (typeof error?.message === "string" &&
+        /NoSuchKey|Not ?Found/i.test(error.message))
+    ) {
       return {
         statusCode: 404,
         headers: { "Content-Type": "application/json" },
@@ -270,6 +333,8 @@ const getImageFormat = (filename) => {
       return "avif";
     case "gif":
       return "gif";
+    case "mp3":
+      return "mp3";
     default:
       return "jpeg"; // default fallback
   }

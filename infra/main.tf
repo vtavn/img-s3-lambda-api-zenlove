@@ -47,6 +47,7 @@ resource "aws_s3_bucket_policy" "images" {
   policy = templatefile("${path.module}/policies/s3-oac-policy.json.tmpl", {
     bucket_arn = aws_s3_bucket.images.arn
     cloudfront_distribution_arn = aws_cloudfront_distribution.main.arn
+    lambda_role_arn = aws_iam_role.lambda_role.arn
   })
 }
 
@@ -105,6 +106,7 @@ resource "aws_lambda_function" "img_transformer" {
   timeout         = 20
   memory_size     = 1024
   layers          = var.sharp_layer_arns
+  source_code_hash = filebase64sha256(var.lambda_zip_path)
 
   environment {
     variables = {
@@ -253,7 +255,7 @@ resource "aws_cloudfront_distribution" "main" {
   enabled             = true
   is_ipv6_enabled     = true
   price_class         = var.price_class
-  aliases             = ["cdn.zenlove.me"]
+  aliases             = var.cdn_aliases
 
   origin {
     domain_name              = aws_s3_bucket.images.bucket_regional_domain_name
@@ -302,6 +304,25 @@ resource "aws_cloudfront_distribution" "main" {
     min_ttl                = 0
     default_ttl            = 3600
     max_ttl                = 86400
+  }
+
+  ordered_cache_behavior {
+    path_pattern     = "/mp3/*"
+    allowed_methods  = ["GET", "HEAD", "OPTIONS"]
+    cached_methods   = ["GET", "HEAD"]
+    target_origin_id = "s3-origin"
+
+    forwarded_values {
+      query_string = false
+      cookies {
+        forward = "none"
+      }
+    }
+
+    viewer_protocol_policy = "redirect-to-https"
+    min_ttl                = 0
+    default_ttl            = 31536000
+    max_ttl                = 31536000
   }
 
   viewer_certificate {

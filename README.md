@@ -17,6 +17,15 @@ CloudFront (global) → API Gateway (HTTP API v2, ap-southeast-1) → Lambda (No
 - **Cache**: CloudFront cache theo tham số, TTL 1 năm
 - **Bảo mật**: S3 private, chỉ CloudFront truy cập qua OAC
 
+#### Bổ sung định dạng
+
+- **GIF**:
+  - Không tham số: trả nguyên bản `image/gif`.
+  - Có tham số (`crop|resize|format|quality`):
+    - GIF động (animated): trả `400` — không hỗ trợ transform, chỉ passthrough khi không có tham số.
+    - GIF tĩnh: cho phép transform; không hỗ trợ output `gif` (hãy dùng `webp/jpeg/png/avif`).
+- **MP3**: Passthrough (không transform), trả `audio/mpeg` và cache 1 năm.
+
 ## Yêu cầu
 
 - AWS CLI đã cấu hình
@@ -105,6 +114,12 @@ https://cdn.yourdomain.com/img/photo.jpg?crop=100,50,800,600&resize=400x300&form
 
 # Chỉ đổi format
 https://cdn.yourdomain.com/img/photo.jpg?format=avif&quality=95
+
+# GIF tĩnh, resize và đổi sang webp
+https://cdn.yourdomain.com/img/static.gif?resize=800x&format=webp&quality=80
+
+# MP3 passthrough
+https://cdn.yourdomain.com/img/audio/song.mp3
 ```
 
 ### Tham số
@@ -115,6 +130,11 @@ https://cdn.yourdomain.com/img/photo.jpg?format=avif&quality=95
 | `resize`  | Thay đổi kích thước            | `600x`, `x400`, `600x400`     |
 | `format`  | Định dạng ảnh                  | `webp`, `jpeg`, `png`, `avif` |
 | `quality` | Chất lượng (1-100)             | `85`                          |
+
+Lưu ý:
+
+- `gif` ở output không được hỗ trợ khi transform. Với ảnh nguồn là GIF, nếu cần output giữ nguyên `gif`, bỏ mọi tham số để passthrough.
+- MP3 không hỗ trợ các tham số `crop`, `resize`, `format`, `quality`.
 
 ## Cấu hình
 
