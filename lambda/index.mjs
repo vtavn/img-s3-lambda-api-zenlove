@@ -73,6 +73,73 @@ const getContentType = (format) => {
   return typeMap[format] || (format === "mp3" ? "audio/mpeg" : "image/webp");
 };
 
+// Determine if a format is an image that we can process
+const isImageFormat = (format) => {
+  return ["jpeg", "png", "webp", "avif", "gif"].includes(format);
+};
+
+// Best-effort MIME type inference for generic files
+const inferMimeFromExt = (filename) => {
+  const ext = filename.split(".").pop()?.toLowerCase();
+  const map = {
+    // images
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    png: "image/png",
+    webp: "image/webp",
+    avif: "image/avif",
+    gif: "image/gif",
+    svg: "image/svg+xml",
+    // audio
+    mp3: "audio/mpeg",
+    m4a: "audio/mp4",
+    aac: "audio/aac",
+    oga: "audio/ogg",
+    ogg: "audio/ogg",
+    wav: "audio/wav",
+    flac: "audio/flac",
+    // video
+    mp4: "video/mp4",
+    m4v: "video/x-m4v",
+    mov: "video/quicktime",
+    webm: "video/webm",
+    ogv: "video/ogg",
+    mkv: "video/x-matroska",
+    // docs
+    pdf: "application/pdf",
+    txt: "text/plain; charset=utf-8",
+    csv: "text/csv; charset=utf-8",
+    json: "application/json",
+    xml: "application/xml",
+    html: "text/html; charset=utf-8",
+    htm: "text/html; charset=utf-8",
+    md: "text/markdown; charset=utf-8",
+    // web assets
+    css: "text/css; charset=utf-8",
+    js: "application/javascript; charset=utf-8",
+    mjs: "application/javascript; charset=utf-8",
+    // archives
+    zip: "application/zip",
+    gz: "application/gzip",
+    tar: "application/x-tar",
+    "7z": "application/x-7z-compressed",
+    rar: "application/vnd.rar",
+    // fonts
+    woff: "font/woff",
+    woff2: "font/woff2",
+    ttf: "font/ttf",
+    otf: "font/otf",
+    // office
+    doc: "application/msword",
+    docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    xls: "application/vnd.ms-excel",
+    xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ppt: "application/vnd.ms-powerpoint",
+    pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  };
+  return map[ext] || "application/octet-stream";
+};
+
 export const handler = async (event) => {
   console.log("Event:", JSON.stringify(event, null, 2));
 
@@ -142,9 +209,9 @@ export const handler = async (event) => {
     // Determine original format from file extension
     const originalFormat = getImageFormat(proxy);
 
-    // Passthrough for MP3 regardless of query params
-    if (originalFormat === "mp3") {
-      const contentType = getContentType("mp3");
+    // Passthrough for non-image types regardless of query params
+    if (!isImageFormat(originalFormat)) {
+      const contentType = s3Response.ContentType || inferMimeFromExt(proxy);
       return {
         statusCode: 200,
         headers: {
@@ -333,10 +400,8 @@ const getImageFormat = (filename) => {
       return "avif";
     case "gif":
       return "gif";
-    case "mp3":
-      return "mp3";
     default:
-      return "jpeg"; // default fallback
+      return ext || null; // keep original extension for generic handling
   }
 };
 
